@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prep Tracker</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+</head>
+<body>
+<style>
+  :root{
+    --paper:#f6f4ee;
+    --ink:#1c1b19;
+    --muted:#8a8478;
+    --line:#ddd8cc;
+    --phy:#2b5f8a;
+    --chem:#b5651d;
+    --math:#5b4b8a;
+    --bio:#2f6b3e;
+    --phy-bg:#e8eff5;
+    --chem-bg:#f6ebdd;
+    --math-bg:#ece8f4;
+    --bio-bg:#e7f0e8;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  *{box-sizing:border-box;}
+  .app{background:var(--paper);color:var(--ink);border-radius:10px;padding:20px;min-height:400px;}
+  .num{font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;}
+  h1{font-size:1.05rem;letter-spacing:.02em;margin:0 0 2px 0;font-weight:700;}
+  .sub{color:var(--muted);font-size:.78rem;margin-bottom:16px;}
+  .tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:10px;}
+  .tab{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;cursor:pointer;font-size:.8rem;font-weight:600;color:var(--muted);}
+  .tab.active{color:#fff;border-color:transparent;}
+  .tab[data-s="phy"].active{background:var(--phy);}
+  .tab[data-s="chem"].active{background:var(--chem);}
+  .tab[data-s="math"].active{background:var(--math);}
+  .tab[data-s="bio"].active{background:var(--bio);}
+  .tab[data-s="log"].active{background:var(--ink);}
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  .paceCard{border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
+  .paceCard .big{font-size:1.9rem;font-weight:800;line-height:1;}
+  .paceCard .lbl{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;}
+  .paceCard .stat{text-align:left;}
+  .paceStats{display:flex;gap:22px;flex-wrap:wrap;}
+  .progbar{height:6px;border-radius:4px;background:#0000000f;overflow:hidden;margin-top:8px;width:100%;}
+  .progbar>div{height:100%;border-radius:4px;}
+
+  .clsHead{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 6px 2px;}
+  .row{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:#fff;}
+  .row.done{opacity:.55;}
+  .row input[type=checkbox]{width:17px;height:17px;flex-shrink:0;cursor:pointer;}
+  .row .cname{flex:1;font-size:.86rem;background:transparent;border:none;outline:none;color:var(--ink);}
+  .row.done .cname{text-decoration:line-through;}
+  .row .target{font-size:.72rem;color:var(--muted);white-space:nowrap;}
+  .row .target.late{color:#b3261e;font-weight:700;}
+  .pill{border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 9px;font-size:.68rem;cursor:pointer;color:var(--muted);white-space:nowrap;}
+  .pill.on{color:#fff;border-color:transparent;}
+  .row .del{border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:.9rem;padding:0 2px;}
+
+  .addRow{display:flex;gap:8px;margin-top:10px;}
+  .addRow input{flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:.82rem;}
+  .addRow select,.addRow button{padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:.8rem;background:#fff;cursor:pointer;}
+
+  .noteline{font-size:.72rem;color:var(--muted);margin:-8px 0 12px 2px;}
+
+  .logForm{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:16px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .logForm label{font-size:.68rem;color:var(--muted);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em;}
+  .logForm input{padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:.82rem;}
+  .logForm button{padding:8px 14px;border:none;background:var(--ink);color:#fff;border-radius:7px;font-size:.82rem;cursor:pointer;font-weight:600;}
+
+  .statGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px;}
+  .statBox{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .statBox .v{font-size:1.4rem;font-weight:800;}
+  .statBox .l{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+
+  .bars{display:flex;align-items:flex-end;gap:4px;height:70px;margin-bottom:18px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;}
+  .bar{flex:1;background:var(--ink);border-radius:3px 3px 0 0;min-height:2px;position:relative;}
+  .bar span{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-size:.55rem;color:var(--muted);white-space:nowrap;margin-bottom:2px;}
+
+  .sessRow{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:5px;background:#fff;font-size:.8rem;}
+  .sessRow .dur{font-weight:700;}
+  .sessRow .del{border:none;background:transparent;color:var(--muted);cursor:pointer;}
+  .loading{color:var(--muted);font-size:.85rem;padding:20px 0;}
+
+  .signinWrap{text-align:center;padding:50px 10px;}
+  .signinWrap p{color:var(--muted);font-size:.82rem;margin-bottom:16px;}
+  .gsiBtn{display:inline-flex;align-items:center;gap:10px;padding:9px 18px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:.85rem;font-weight:600;color:var(--ink);}
+  .gsiBtn:hover{background:#fafafa;}
+  .denied{color:#b3261e;font-size:.8rem;margin-top:14px;}
+
+  .acctBar{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin:-4px 0 8px 0;}
+  .acctBar img{width:22px;height:22px;border-radius:50%;}
+  .acctBar .who{font-size:.72rem;color:var(--muted);}
+  .acctBar button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 10px;font-size:.7rem;cursor:pointer;color:var(--muted);}
+</style>
+
+<div class="app">
+  <h1>Prep Tracker</h1>
+  <div class="sub">Physics · Chemistry · Math · Biology — Allen Module / Marks App PYQ / Fingertips (Bio) — plus study session log</div>
+
+  <div id="signin" class="signinWrap" style="display:none;">
+    <p>Sign in to load your tracker.</p>
+    <button class="gsiBtn" onclick="doSignIn()">
+      <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 8 3l6-6C34.1 5.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.9 18.9 12 24 12c3.1 0 5.8 1.1 8 3l6-6C34.1 5.5 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.4 26.7 36 24 36c-5.3 0-9.7-3.1-11.3-7.5l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.6l6.2 5.2C40.9 36 44 30.6 44 24c0-1.3-.1-2.7-.4-3.5z"/></svg>
+      Sign in with Google
+    </button>
+    <div id="signinError" class="denied"></div>
+  </div>
+
+  <div id="appShell" style="display:none;">
+    <div class="acctBar">
+      <img id="acctPhoto" src="" alt="">
+      <span class="who" id="acctEmail"></span>
+      <button onclick="doSignOut()">Sign out</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab" data-s="phy">Physics</button>
+      <button class="tab" data-s="chem">Chemistry</button>
+      <button class="tab" data-s="math">Math</button>
+      <button class="tab" data-s="bio">Biology</button>
+      <button class="tab" data-s="log">Study Log</button>
+    </div>
+
+    <div id="loading" class="loading">Loading tracker…</div>
+    <div id="content" style="display:none;">
+      <div class="panel" data-p="phy"></div>
+      <div class="panel" data-p="chem"></div>
+      <div class="panel" data-p="math"></div>
+      <div class="panel" data-p="bio"></div>
+      <div class="panel" data-p="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUBS = {
+  phy:  {label:"Physics",  color:"var(--phy)",  bg:"var(--phy-bg)",  deadline:"2026-12-15", hasFingertips:false},
+  chem: {label:"Chemistry",color:"var(--chem)", bg:"var(--chem-bg)", deadline:"2026-12-15", hasFingertips:false},
+  math: {label:"Math",     color:"var(--math)", bg:"var(--math-bg)", deadline:"2026-12-15", hasFingertips:false},
+  bio:  {label:"Biology",  color:"var(--bio)",  bg:"var(--bio-bg)",  deadline:"2027-04-15", hasFingertips:true},
+};
+
+const DEFAULT_CHAPTERS = {
+  phy: [
+    ["11","Physical World"],["11","Units and Measurements"],["11","Motion in a Straight Line"],
+    ["11","Motion in a Plane"],["11","Laws of Motion"],["11","Work, Energy and Power"],
+    ["11","System of Particles and Rotational Motion"],["11","Gravitation"],
+    ["11","Mechanical Properties of Solids"],["11","Mechanical Properties of Fluids"],
+    ["11","Thermal Properties of Matter"],["11","Thermodynamics"],["11","Kinetic Theory of Gases"],
+    ["11","Oscillations"],["11","Waves"],
+    ["12","Electric Charges and Fields"],["12","Electrostatic Potential and Capacitance"],
+    ["12","Current Electricity"],["12","Moving Charges and Magnetism"],["12","Magnetism and Matter"],
+    ["12","Electromagnetic Induction"],["12","Alternating Current"],["12","Electromagnetic Waves"],
+    ["12","Ray Optics and Optical Instruments"],["12","Wave Optics"],
+    ["12","Dual Nature of Radiation and Matter"],["12","Atoms"],["12","Nuclei"],
+    ["12","Semiconductor Electronics"]
+  ],
+  chem: [
+    ["11","Some Basic Concepts of Chemistry"],["11","Structure of Atom"],
+    ["11","Classification of Elements and Periodicity"],["11","Chemical Bonding and Molecular Structure"],
+    ["11","States of Matter"],["11","Thermodynamics"],["11","Equilibrium"],["11","Redox Reactions"],
+    ["11","Organic Chemistry – Basic Principles"],["11","Hydrocarbons"],
+    ["12","Solutions"],["12","Electrochemistry"],["12","Chemical Kinetics"],
+    ["12","d and f Block Elements"],["12","Coordination Compounds"],
+    ["12","Haloalkanes and Haloarenes"],["12","Alcohols, Phenols and Ethers"],
+    ["12","Aldehydes, Ketones and Carboxylic Acids"],["12","Amines"],["12","Biomolecules"],
+    ["12","Polymers"],["12","Chemistry in Everyday Life"],["12","p-Block Elements"],["12","Solid State"]
+  ],
+  math: [
+    ["11","Sets"],["11","Relations and Functions"],["11","Trigonometric Functions"],
+    ["11","Complex Numbers and Quadratic Equations"],["11","Linear Inequalities"],
+    ["11","Permutations and Combinations"],["11","Binomial Theorem"],["11","Sequences and Series"],
+    ["11","Straight Lines"],["11","Conic Sections"],["11","Introduction to 3D Geometry"],
+    ["11","Limits and Derivatives"],["11","Statistics"],["11","Probability"],
+    ["12","Relations and Functions"],["12","Inverse Trigonometric Functions"],["12","Matrices"],
+    ["12","Determinants"],["12","Continuity and Differentiability"],["12","Application of Derivatives"],
+    ["12","Integrals"],["12","Application of Integrals"],["12","Differential Equations"],
+    ["12","Vector Algebra"],["12","Three Dimensional Geometry"],["12","Linear Programming"],["12","Probability"]
+  ],
+  bio: [
+    ["11","The Living World"],["11","Biological Classification"],["11","Plant Kingdom"],
+    ["11","Animal Kingdom"],["11","Morphology of Flowering Plants"],["11","Anatomy of Flowering Plants"],
+    ["11","Structural Organisation in Animals"],["11","Cell: The Unit of Life"],["11","Biomolecules"],
+    ["11","Cell Cycle and Cell Division"],["11","Transport in Plants"],["11","Mineral Nutrition"],
+    ["11","Photosynthesis in Higher Plants"],["11","Respiration in Plants"],
+    ["11","Plant Growth and Development"],["11","Digestion and Absorption"],
+    ["11","Breathing and Exchange of Gases"],["11","Body Fluids and Circulation"],
+    ["11","Excretory Products and their Elimination"],["11","Locomotion and Movement"],
+    ["11","Neural Control and Coordination"],["11","Chemical Coordination and Integration"],
+    ["12","Sexual Reproduction in Flowering Plants"],["12","Human Reproduction"],
+    ["12","Reproductive Health"],["12","Principles of Inheritance and Variation"],
+    ["12","Molecular Basis of Inheritance"],["12","Evolution"],["12","Human Health and Disease"],
+    ["12","Microbes in Human Welfare"],["12","Biotechnology: Principles and Processes"],
+    ["12","Biotechnology and its Applications"],["12","Organisms and Populations"],
+    ["12","Ecosystem"],["12","Biodiversity and Conservation"]
+  ]
+};
+
+let state = null;
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCHkFqVQsQiYTDpZW5AK6txyYCBfgKxWB8",
+  authDomain: "patha-tds.firebaseapp.com",
+  projectId: "patha-tds",
+  storageBucket: "patha-tds.firebasestorage.app",
+  messagingSenderId: "321802197128",
+  appId: "1:321802197128:web:0dc8319f0694e433b7e73d",
+  measurementId: "G-98PNCJS4H9"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+const stateDocRef = db.collection("prepTracker").doc("main");
+
+function doSignIn(){
+  document.getElementById('signinError').textContent = '';
+  auth.signInWithPopup(googleProvider).catch(e=>{
+    console.error("sign-in failed", e);
+    document.getElementById('signinError').textContent = "Sign-in failed: " + e.message;
+  });
+}
+function doSignOut(){
+  auth.signOut();
+}
+
+function buildDefault(){
+  const chapters = {};
+  for(const s of Object.keys(DEFAULT_CHAPTERS)){
+    chapters[s] = DEFAULT_CHAPTERS[s].map((c,i)=>({
+      id: s+"_"+i, cls:c[0], name:c[1], done:false, allen:false, pyq:false, fingertips:false
+    }));
+  }
+  return {chapters, sessions:[]};
+}
+
+async function loadState(){
+  try{
+    const snap = await stateDocRef.get();
+    if(snap.exists) return snap.data();
+  }catch(e){ console.error("load failed", e); }
+  return null;
+}
+
+let saveInFlight = null, savePending = false;
+async function saveState(){
+  // Coalesce rapid successive saves (e.g. from quick clicks) into a single write in flight.
+  if(saveInFlight){ savePending = true; return; }
+  saveInFlight = (async ()=>{
+    try{ await stateDocRef.set(state); }
+    catch(e){ console.error("save failed", e); }
+    saveInFlight = null;
+    if(savePending){ savePending = false; saveState(); }
+  })();
+}
+
+function fmtDate(d){
+  return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+}
+
+function renderSubject(subKey){
+  const meta = SUBS[subKey];
+  const chapters = state.chapters[subKey];
+  const remaining = chapters.filter(c=>!c.done);
+  const doneCount = chapters.length - remaining.length;
+  const today = new Date();
+  const deadline = new Date(meta.deadline+"T00:00:00");
+  const daysLeft = (deadline - today)/86400000;
+  const overdue = daysLeft <= 0;
+  const pace = overdue ? remaining.length : (remaining.length / (daysLeft/7));
+  const dayInterval = (!overdue && remaining.length>0) ? (daysLeft/remaining.length) : 0;
+
+  let targetDates = {};
+  remaining.forEach((c,i)=>{
+    const t = new Date(today.getTime() + i*dayInterval*86400000);
+    targetDates[c.id] = t;
+  });
+
+  const pct = Math.round((doneCount/chapters.length)*100);
+
+  let html = `
+    <div class="paceCard" style="background:${meta.bg};">
+      <div class="stat">
+        <div class="big" style="color:${meta.color};">${overdue ? remaining.length+" left" : pace.toFixed(1)+" /wk"}</div>
+        <div class="lbl">${overdue ? "past target date — clear backlog now" : "minimum pace to hit deadline"}</div>
+      </div>
+      <div class="paceStats">
+        <div class="stat"><div class="big" style="font-size:1.3rem;">${doneCount}/${chapters.length}</div><div class="lbl">chapters done</div></div>
+        <div class="stat"><div class="big" style="font-size:1.3rem;">${fmtDate(deadline)}</div><div class="lbl">target: syllabus complete</div></div>
+      </div>
+    </div>
+    <div class="progbar"><div style="width:${pct}%;background:${meta.color};"></div></div>
+    <div class="noteline">Chapter list is a standard approximation — edit names or add/remove rows if it doesn't match your actual Allen module order.</div>
+  `;
+
+  ["11","12"].forEach(cls=>{
+    const rows = chapters.filter(c=>c.cls===cls);
+    if(!rows.length) return;
+    html += `<div class="clsHead">Class ${cls}</div>`;
+    rows.forEach(c=>{
+      const target = c.done ? "" : targetDates[c.id];
+      const late = target && target < today;
+      html += `<div class="row ${c.done?'done':''}">
+        <input type="checkbox" ${c.done?'checked':''} onchange="toggleDone('${subKey}','${c.id}')">
+        <input class="cname" value="${c.name.replace(/"/g,'&quot;')}" onchange="renameChapter('${subKey}','${c.id}',this.value)">
+        <button class="pill ${c.allen?'on':''}" style="${c.allen?`background:${meta.color};`:''}" onclick="togglePill('${subKey}','${c.id}','allen')">Allen</button>
+        <button class="pill ${c.pyq?'on':''}" style="${c.pyq?`background:${meta.color};`:''}" onclick="togglePill('${subKey}','${c.id}','pyq')">Marks PYQ</button>
+        ${meta.hasFingertips ? `<button class="pill ${c.fingertips?'on':''}" style="${c.fingertips?`background:${meta.color};`:''}" onclick="togglePill('${subKey}','${c.id}','fingertips')">Fingertips</button>` : ''}
+        ${target ? `<span class="target ${late?'late':''}">by ${fmtDate(target)}</span>` : `<span class="target">✓</span>`}
+        <button class="del" onclick="deleteChapter('${subKey}','${c.id}')">✕</button>
+      </div>`;
+    });
+  });
+
+  html += `<div class="addRow">
+    <select id="addCls_${subKey}"><option value="11">Class 11</option><option value="12">Class 12</option></select>
+    <input id="addName_${subKey}" placeholder="Add chapter…" onkeydown="if(event.key==='Enter')addChapter('${subKey}')">
+    <button onclick="addChapter('${subKey}')">Add</button>
+  </div>`;
+
+  document.querySelector(`.panel[data-p="${subKey}"]`).innerHTML = html;
+}
+
+function toggleDone(sub,id){
+  const c = state.chapters[sub].find(x=>x.id===id);
+  c.done = !c.done;
+  saveState(); renderSubject(sub);
+}
+function togglePill(sub,id,field){
+  const c = state.chapters[sub].find(x=>x.id===id);
+  c[field] = !c[field];
+  saveState(); renderSubject(sub);
+}
+function renameChapter(sub,id,val){
+  const c = state.chapters[sub].find(x=>x.id===id);
+  c.name = val;
+  saveState();
+}
+function deleteChapter(sub,id){
+  state.chapters[sub] = state.chapters[sub].filter(x=>x.id!==id);
+  saveState(); renderSubject(sub);
+}
+function addChapter(sub){
+  const nameEl = document.getElementById('addName_'+sub);
+  const clsEl = document.getElementById('addCls_'+sub);
+  const name = nameEl.value.trim();
+  if(!name) return;
+  const id = sub+"_"+Date.now();
+  state.chapters[sub].push({id, cls:clsEl.value, name, done:false, allen:false, pyq:false, fingertips:false});
+  nameEl.value = "";
+  saveState(); renderSubject(sub);
+}
+
+function renderLog(){
+  const sessions = [...state.sessions].sort((a,b)=> new Date(b.start) - new Date(a.start));
+  const now = new Date();
+  const totalHrs = sessions.reduce((s,x)=>s+x.hrs,0);
+  const last24 = sessions.filter(x=> (now - new Date(x.start)) <= 24*3600000).reduce((s,x)=>s+x.hrs,0);
+  const last7d = sessions.filter(x=> (now - new Date(x.start)) <= 7*24*3600000).reduce((s,x)=>s+x.hrs,0);
+
+  // last 14 calendar days bar chart
+  const days = [];
+  for(let i=13;i>=0;i--){
+    const d = new Date(now.getFullYear(),now.getMonth(),now.getDate()-i);
+    days.push(d);
+  }
+  const dayTotals = days.map(d=>{
+    const key = d.toDateString();
+    const hrs = sessions.filter(x=> new Date(x.start).toDateString()===key).reduce((s,x)=>s+x.hrs,0);
+    return {d, hrs};
+  });
+  const maxH = Math.max(1, ...dayTotals.map(x=>x.hrs));
+
+  let html = `
+    <div class="logForm">
+      <div><label>Session start</label><input type="datetime-local" id="sessStart"></div>
+      <div><label>Session end</label><input type="datetime-local" id="sessEnd"></div>
+      <button onclick="addSession()">Log session</button>
+    </div>
+    <div class="statGrid">
+      <div class="statBox"><div class="v num">${last24.toFixed(1)}h</div><div class="l">last 24 hours</div></div>
+      <div class="statBox"><div class="v num">${last7d.toFixed(1)}h</div><div class="l">last 7 days</div></div>
+      <div class="statBox"><div class="v num">${totalHrs.toFixed(1)}h</div><div class="l">total logged</div></div>
+      <div class="statBox"><div class="v num">${sessions.length}</div><div class="l">sessions</div></div>
+    </div>
+    <div class="bars">
+      ${dayTotals.map(x=>`<div class="bar" style="height:${Math.max(2,(x.hrs/maxH)*54)}px;" title="${x.d.toDateString()}: ${x.hrs.toFixed(1)}h"><span>${x.hrs>0?x.hrs.toFixed(1):''}</span></div>`).join('')}
+    </div>
+    <div class="noteline">Bars = last 14 calendar days, by session start. Log by contiguous block, not by calendar day — irregular sleep is fine, just enter actual start/end of each sitting.</div>
+  `;
+
+  sessions.forEach(s=>{
+    const st = new Date(s.start), en = new Date(s.end);
+    html += `<div class="sessRow">
+      <span>${st.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}, ${st.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})} → ${en.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
+      <span class="dur num">${s.hrs.toFixed(2)}h</span>
+      <button class="del" onclick="deleteSession('${s.id}')">✕</button>
+    </div>`;
+  });
+
+  document.querySelector('.panel[data-p="log"]').innerHTML = html;
+}
+
+function addSession(){
+  const startVal = document.getElementById('sessStart').value;
+  const endVal = document.getElementById('sessEnd').value;
+  if(!startVal || !endVal) return;
+  const start = new Date(startVal), end = new Date(endVal);
+  const hrs = (end - start)/3600000;
+  if(hrs <= 0) return;
+  state.sessions.push({id:"sess_"+Date.now(), start:start.toISOString(), end:end.toISOString(), hrs});
+  saveState(); renderLog();
+}
+function deleteSession(id){
+  state.sessions = state.sessions.filter(s=>s.id!==id);
+  saveState(); renderLog();
+}
+
+function renderAll(){
+  Object.keys(SUBS).forEach(renderSubject);
+  renderLog();
+}
+
+function switchTab(key){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.s===key));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.dataset.p===key));
+}
+
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>switchTab(t.dataset.s)));
+
+async function initApp(){
+  let loaded = null;
+  try{
+    loaded = await loadState();
+  }catch(e){
+    console.error("init load failed", e);
+  }
+  state = loaded || buildDefault();
+  if(!state.sessions) state.sessions = [];
+  document.getElementById('loading').style.display='none';
+  document.getElementById('content').style.display='block';
+  renderAll();
+  switchTab('phy');
+  if(!loaded) saveState();
+}
+
+auth.onAuthStateChanged(user=>{
+  if(user){
+    document.getElementById('signin').style.display='none';
+    document.getElementById('appShell').style.display='block';
+    document.getElementById('acctPhoto').src = user.photoURL || '';
+    document.getElementById('acctEmail').textContent = user.email || user.displayName || '';
+    initApp();
+  } else {
+    document.getElementById('appShell').style.display='none';
+    document.getElementById('signin').style.display='block';
+  }
+});
+</script>
+</body>
+</html>
